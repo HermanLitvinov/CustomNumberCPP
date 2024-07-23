@@ -7,28 +7,33 @@
 #include <vector>
 #include <unordered_set>
 #include <stdio.h>
+#include <memory> // shared_ptr
+
+#define CUSTOM_NUMBER_SHARED_PTR std::shared_ptr<CustomNumber>
 
 class CustomNumber
 {
 private: // public variables
-    double n_value;
-    double n_grad_value;
+    double m_value;
+    double m_grad_value;
 
-    std::string n_ancestors_operation;
+    std::string m_ancestors_operation;
 
-    int n_ancestors_num;
-    CustomNumber** n_ancestors;
+    int m_ancestors_num;
+    // CustomNumber** m_ancestors;
 
-    std::function<void()> n_backward_func;
+    std::vector<CUSTOM_NUMBER_SHARED_PTR> m_ancestors;
+
+    std::function<void()> m_backward_func;
 
 private:
         //parse the tree
-    void rec_tree_parse(CustomNumber* curr, std::vector<CustomNumber*>& ancestors, std::unordered_set<CustomNumber*>& visited);
+    void rec_tree_parse(CUSTOM_NUMBER_SHARED_PTR curr, std::vector<CUSTOM_NUMBER_SHARED_PTR>& ancestors, std::unordered_set<CUSTOM_NUMBER_SHARED_PTR>& visited);
 
 public: // public functions
     ~CustomNumber();
 
-    CustomNumber operator+(CustomNumber &rhs);
+    CustomNumber operator+(CustomNumber rhs);
 
     CustomNumber operator-(CustomNumber &rhs);
 
@@ -43,13 +48,13 @@ public: // public functions
     void backward();
 
     void set_backward_func(std::function<void()>& backward_func);
-    void set_grad_value(double grad_value);
+    void set_grad_value(const double& grad_value);
 
-    double get_value() const;
-    double get_grad_value() const;
-    std::function<void()> get_backward_func() const;
-    CustomNumber** get_ancestors() const;
-    int get_ancestors_num() const;
+    double get_value();
+    double get_grad_value();
+    std::function<void()> get_backward_func();
+    std::vector<CUSTOM_NUMBER_SHARED_PTR> get_ancestors();
+    int get_ancestors_num();
 
 private: // private template functions
     template <typename T>
@@ -61,29 +66,22 @@ private: // private template functions
 
 public: // public template functions
     template <typename T>
-    CustomNumber(T value, std::string operation = "None", CustomNumber** ancestors = nullptr, int ancestors_num = 0, void (*backward_func)() = nullptr)
-        : n_ancestors_operation(operation), n_backward_func(backward_func), n_ancestors_num(ancestors_num)
+    CustomNumber(T value, std::string operation = "None", std::vector<CUSTOM_NUMBER_SHARED_PTR> ancestors = std::vector<CUSTOM_NUMBER_SHARED_PTR>(), int ancestors_num = 0, void (*backward_func)() = NULL)
+        : m_ancestors_operation(operation), m_backward_func(backward_func), m_ancestors_num(ancestors_num)
     {
         validate_value_type<T>();
-        this->n_value = static_cast<double>(value);
-        this->n_grad_value = 0.0;
+        this->m_value = static_cast<double>(value);
+        this->m_grad_value = 0.0;
         
         // creating new array 
-        if(ancestors_num > 0)
-        {
-            n_ancestors = new CustomNumber*[ancestors_num];
-            for (int i = 0; i < ancestors_num; ++i) 
-            {
-                n_ancestors[i] = ancestors[i];
-            }
-        }
+        m_ancestors = ancestors; // do something smarter with memory
     }
 
     template <typename T>
-    CustomNumber operator+(const T &rhs)
+    CustomNumber operator+(const T rhs)
     {
-        CustomNumber other(rhs);
-        return (*this) + other;
+        CustomNumber* other = new CustomNumber(rhs);
+        return (*this) + (*other);
     }
 
     template <typename T>
@@ -96,8 +94,23 @@ public: // public template functions
     template <typename T>
     CustomNumber operator*(const T &rhs)
     {
-        CustomNumber other(rhs);
-        return (*this) * other;
+        CustomNumber* other = new CustomNumber(rhs);
+        // return (*this) * (*other);
+        CustomNumber* out_ancestors[2] = {this, other};
+
+        CustomNumber out (this->m_value * other->get_value(), "multiplication (*)", out_ancestors, 2);
+
+        std::function<void()> backward_func_arg = [&out]()
+        {
+            CustomNumber* anc0 = out.get_ancestors()[0];
+            CustomNumber* anc1 = out.get_ancestors()[1];
+            anc0->set_grad_value(anc0->get_grad_value() + anc1->get_value() * out.get_grad_value());
+            anc1->set_grad_value(anc1->get_grad_value() + anc0->get_value() * out.get_grad_value());
+        };
+
+        out.set_backward_func(backward_func_arg);
+
+        return out;
     }
 
     template <typename T>
