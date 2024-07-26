@@ -152,6 +152,11 @@ void CustomNumber::set_grad_value(const double& grad_value)
     this->m_grad_value = grad_value;
 }
 
+void CustomNumber::set_value(const double& value)
+{
+    this->m_value = value;
+}
+
 double CustomNumber::get_grad_value()
 {
     return this->m_grad_value;
